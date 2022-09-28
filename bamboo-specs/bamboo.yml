@@ -1,0 +1,142 @@
+---
+version: 2
+plan:
+  project-key: MENT
+  key: INDIATESTFRONTEND
+  name: India-Ment-Test Frontend Deployment
+stages:
+  - Default Stage:
+      manual: false
+      final: false
+      jobs:
+        - Default Job
+Default Job:
+  key: JOB1
+  tasks:
+    - checkout:
+        force-clean-build: 'false'
+    - script:
+        interpreter: SHELL
+        scripts:
+          - echo PLAN_NAME="$( echo '${bamboo.planKey}' | tr '[:upper:]' '[:lower:]')" > variables
+    - inject-variables:
+        file: variables
+        scope: RESULT
+        namespace: inject
+    - any-task:
+        plugin-key: com.atlassian.bamboo.plugins.bamboo-docker-plugin:task.docker.cli
+        configuration:
+          commandOption: build
+          repository: docker.atican.dev/${bamboo.inject.PLAN_NAME}:${bamboo.buildNumber}
+          dockerfileOption: existing
+          nocache: 'false'
+          save: 'false'
+    - any-task:
+        plugin-key: com.atlassian.bamboo.plugins.bamboo-docker-plugin:task.docker.cli
+        configuration:
+          commandOption: push
+          pushRepository: docker.atican.dev/${bamboo.inject.PLAN_NAME}:${bamboo.buildNumber}
+          registryOption: custom
+branches:
+  create: manually
+  delete:
+    after-deleted-days: 7
+    after-inactive-days: never
+  link-to-jira: true
+notifications:
+  - events:
+      - plan-responsibility-changed
+    recipients:
+      - responsible
+  - events:
+      - job-error
+    recipients:
+      - responsible
+      - committers
+      - watchers
+  - events:
+      - plan-completed
+    recipients:
+      - committers
+      - watchers
+labels: []
+other:
+  concurrent-build-plugin: system-default
+# Some plugin configurations are not supported by YAML Specs
+---
+version: 2
+plan:
+  key: MENT-INDIATESTFRONTEND
+plan-permissions:
+  - users:
+      - nick
+    groups:
+      - bamboo-admin
+      - "TFW DevOps"
+    permissions:
+      - view
+      - edit
+      - build
+      - clone
+      - admin
+---
+version: 2
+deployment:
+  name: India-Ment-Test Frontend Deployment
+  source-plan: MENT-INDIATESTFRONTEND
+release-naming:
+  next-version-name: release-01
+  applies-to-branches: false
+  auto-increment: true
+  auto-increment-variables: []
+environments:
+  - Production Server
+Production Server:
+  triggers:
+    - build-success
+  tasks:
+    - clean
+    - script:
+        interpreter: SHELL
+        scripts:
+          - echo PLAN_NAME="$( echo '${bamboo.planKey}' | tr '[:upper:]' '[:lower:]')" > variables
+    - inject-variables:
+        file: variables
+        scope: LOCAL
+        namespace: inject
+    - ssh:
+        host: 13.232.18.39
+        command: 'source ~/.profile && source ~/.bash_profile && cd /data/websites/ && sed -i ''s/image: docker.atican.dev\/${bamboo.inject.PLAN_NAME}:[a-zA-Z0-9!@#|,.<>\/?\-]*/image: docker.atican.dev\/${bamboo.inject.PLAN_NAME}:${bamboo.buildNumber}/g'' docker-compose.yml && docker-compose up -d  test_frontend_india'
+        authentication:
+          username: ubuntu
+          shared-credentials: ID_AWS
+  final-tasks: []
+  variables: {}
+  requirements: []
+  notifications:
+    - events:
+        - deployment-started-and-finished
+      recipients:
+        - groups:
+            - bamboo-admin
+            - "TFW DevOps"
+---
+version: 2
+deployment:
+  name: India-Ment-Test Frontend Deployment
+deployment-permissions:
+  - groups:
+      - bamboo-admin
+      - "TFW DevOps"
+    permissions:
+      - view
+      - edit
+environment-permissions:
+  - Production Server:
+      - groups:
+          - bamboo-admin
+          - "TFW DevOps"
+        permissions:
+          - view
+          - edit
+          - deploy
